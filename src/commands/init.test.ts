@@ -9,12 +9,15 @@ function makeTempDir(): string {
 
 describe('initCommand', () => {
   let tmpDir: string;
+  let originalCwd: string;
 
   beforeEach(() => {
     tmpDir = makeTempDir();
+    originalCwd = process.cwd();
   });
 
   afterEach(() => {
+    process.chdir(originalCwd);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
