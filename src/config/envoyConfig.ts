@@ -61,3 +61,20 @@ export function initConfig(overrides: Partial<EnvoyConfig> = {}, projectRoot?: s
   saveConfig(config, projectRoot);
   return config;
 }
+
+/**
+ * Updates specific fields of an existing config file without overwriting the entire file.
+ * Throws if the config file does not exist.
+ */
+export function updateConfig(updates: Partial<EnvoyConfig>, projectRoot?: string): EnvoyConfig {
+  const configPath = getConfigPath(projectRoot);
+
+  if (!fs.existsSync(configPath)) {
+    throw new Error(`${CONFIG_FILE_NAME} not found. Run 'envoy init' to create one.`);
+  }
+
+  const existing = loadConfig(projectRoot);
+  const updated: EnvoyConfig = { ...existing, ...updates };
+  saveConfig(updated, projectRoot);
+  return updated;
+}
