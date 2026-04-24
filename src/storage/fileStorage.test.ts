@@ -1,7 +1,15 @@
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
-import { getStorePath, loadStore, saveStore, pushEnvFile, pullEnvFile, EnvStore } from './fileStorage';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import {
+  getStorePath,
+  initStore,
+  loadStore,
+  saveStore,
+  upsertEntry,
+  getEntry,
+  EnvStore,
+} from './fileStorage';
 
 function makeTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-storage-test-'));
@@ -18,58 +26,70 @@ describe('fileStorage', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('getStorePath returns correct path', () => {
-    expect(getStorePath(tmpDir)).toBe(path.join(tmpDir, '.envoy', 'store.json'));
+  describe('getStorePath', () => {
+    it('returns path to .envoy.store in given directory', () => {
+      expect(getStorePath(tmpDir)).toBe(path.join(tmpDir, '.envoy.store'));
+    });
   });
 
-  test('loadStore returns empty store when no file exists', () => {
-    const store = loadStore(tmpDir);
-    expect(store.version).toBe(1);
-    expect(store.files).toEqual([]);
+  describe('initStore', () => {
+    it('creates .envoy.store file with default structure', () => {
+      const store = initStore(tmpDir);
+      expect(store.version).toBe(1);
+      expect(store.entries).toEqual({});
+      expect(fs.existsSync(getStorePath(tmpDir))).toBe(true);
+    });
   });
 
-  test('saveStore and loadStore round-trip', () => {
-    const store: EnvStore = { version: 1, files: [] };
-    saveStore(tmpDir, store);
-    const loaded = loadStore(tmpDir);
-    expect(loaded).toEqual(store);
+  describe('loadStore', () => {
+    it('loads an existing store', () => {
+      initStore(tmpDir);
+      const store = loadStore(tmpDir);
+      expect(store.version).toBe(1);
+    });
+
+    it('throws if store does not exist', () => {
+      expect(() => loadStore(tmpDir)).toThrow("Run 'envoy init' first.");
+    });
   });
 
-  test('pushEnvFile stores encrypted entry', async () => {
-    const envFile = path.join(tmpDir, '.env');
-    fs.writeFileSync(envFile, 'KEY=value\nSECRET=abc123');
-    await pushEnvFile(tmpDir, envFile, 'production', 'test-passphrase');
-    const store = loadStore(tmpDir);
-    expect(store.files).toHaveLength(1);
-    expect(store.files[0].name).toBe('.env');
-    expect(store.files[0].environment).toBe('production');
-    expect(store.files[0].encryptedData).toBeTruthy();
+  describe('saveStore', () => {
+    it('persists store changes to disk', () => {
+      const store = initStore(tmpDir);
+      store.version = 2;
+      saveStore(tmpDir, store);
+      const reloaded = loadStore(tmpDir);
+      expect(reloaded.version).toBe(2);
+    });
+
+    it('updates updatedAt timestamp on save', () => {
+      const store = initStore(tmpDir);
+      const before = store.updatedAt;
+      saveStore(tmpDir, store);
+      const reloaded = loadStore(tmpDir);
+      expect(reloaded.updatedAt).not.toBe(before);
+    });
   });
 
-  test('pushEnvFile updates existing entry', async () => {
-    const envFile = path.join(tmpDir, '.env');
-    fs.writeFileSync(envFile, 'KEY=value1');
-    await pushEnvFile(tmpDir, envFile, 'staging', 'pass');
-    fs.writeFileSync(envFile, 'KEY=value2');
-    await pushEnvFile(tmpDir, envFile, 'staging', 'pass');
-    const store = loadStore(tmpDir);
-    expect(store.files).toHaveLength(1);
-  });
+  describe('upsertEntry and getEntry', () => {
+    it('inserts a new entry and retrieves it', () => {
+      const store = initStore(tmpDir);
+      const entry = {
+        ciphertext: 'abc123',
+        iv: 'iv-value',
+        salt: 'salt-value',
+        pushedAt: new Date().toISOString(),
+        pushedBy: 'alice',
+      };
+      upsertEntry(store, 'production', entry);
+      const retrieved = getEntry(store, 'production');
+      expect(retrieved?.ciphertext).toBe('abc123');
+      expect(retrieved?.environment).toBe('production');
+    });
 
-  test('pullEnvFile restores original content', async () => {
-    const envFile = path.join(tmpDir, '.env');
-    const original = 'API_KEY=secret\nDB_URL=postgres://localhost/db';
-    fs.writeFileSync(envFile, original);
-    await pushEnvFile(tmpDir, envFile, 'development', 'my-passphrase');
-    const destFile = path.join(tmpDir, '.env.pulled');
-    await pullEnvFile(tmpDir, '.env', 'development', destFile, 'my-passphrase');
-    const restored = fs.readFileSync(destFile, 'utf-8');
-    expect(restored).toBe(original);
-  });
-
-  test('pullEnvFile throws when entry not found', async () => {
-    await expect(
-      pullEnvFile(tmpDir, '.env', 'production', path.join(tmpDir, 'out'), 'pass')
-    ).rejects.toThrow("No stored file found for '.env' in environment 'production'");
+    it('returns undefined for missing environment', () => {
+      const store = initStore(tmpDir);
+      expect(getEntry(store, 'staging')).toBeUndefined();
+    });
   });
 });
