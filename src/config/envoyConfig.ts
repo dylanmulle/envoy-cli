@@ -78,3 +78,11 @@ export function updateConfig(updates: Partial<EnvoyConfig>, projectRoot?: string
   saveConfig(updated, projectRoot);
   return updated;
 }
+
+/**
+ * Checks whether a config file exists in the given project root (or cwd).
+ * Useful for commands that behave differently depending on initialisation state.
+ */
+export function configExists(projectRoot?: string): boolean {
+  return fs.existsSync(getConfigPath(projectRoot));
+}
