@@ -1,46 +1,29 @@
 #!/usr/bin/env node
+import { Command } from 'commander';
+import { registerEnvCommand } from './commands/env';
 
-/**
- * envoy-cli — Main entry point
- * Registers all CLI commands and parses arguments via yargs.
- */
+// Dynamically import existing command registrations
+import { program as initProgram } from './commands/init';
+import { program as pushProgram } from './commands/push';
+import { program as pullProgram } from './commands/pull';
+import { program as listProgram } from './commands/list';
+import { program as removeProgram } from './commands/remove';
 
-import yargs from 'yargs';
-import { hideBin } from 'yargs/helpers';
+const program = new Command();
 
-import { registerInitCommand } from './commands/init';
-import { registerPushCommand } from './commands/push';
-import { registerPullCommand } from './commands/pull';
-import { registerListCommand } from './commands/list';
+program
+  .name('envoy')
+  .description('A CLI tool for managing and syncing .env files across environments')
+  .version('0.1.0');
 
-async function main(): Promise<void> {
-  const cli = yargs(hideBin(process.argv))
-    .scriptName('envoy')
-    .usage('$0 <command> [options]')
-    .strict()
-    .help('help')
-    .alias('h', 'help')
-    .version()
-    .alias('v', 'version')
-    .wrap(Math.min(120, process.stdout.columns ?? 80))
-    .epilogue(
-      'For more information, visit https://github.com/your-org/envoy-cli'
-    );
+// Register sub-commands
+program.addCommand(initProgram);
+program.addCommand(pushProgram);
+program.addCommand(pullProgram);
+program.addCommand(listProgram);
+program.addCommand(removeProgram);
 
-  // Register each sub-command
-  registerInitCommand(cli);
-  registerPushCommand(cli);
-  registerPullCommand(cli);
-  registerListCommand(cli);
+// Register env command
+registerEnvCommand(program);
 
-  // Show help when no command is provided
-  cli.demandCommand(1, 'You must specify a command. Run --help for usage.');
-
-  await cli.parseAsync();
-}
-
-main().catch((err: unknown) => {
-  const message = err instanceof Error ? err.message : String(err);
-  console.error(`\nError: ${message}`);
-  process.exit(1);
-});
+program.parse(process.argv);
