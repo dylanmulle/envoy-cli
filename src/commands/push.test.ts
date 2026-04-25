@@ -9,6 +9,13 @@ function makeTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'envoy-cmd-test-'));
 }
 
+/** Writes a .env file in the given directory and returns its full path. */
+function writeEnvFile(dir: string, content: string, filename = '.env'): string {
+  const filePath = path.join(dir, filename);
+  fs.writeFileSync(filePath, content);
+  return filePath;
+}
+
 describe('push and pull commands', () => {
   let tmpDir: string;
 
@@ -23,7 +30,7 @@ describe('push and pull commands', () => {
 
   test('pushCommand stores and pullCommand restores env file', async () => {
     const envContent = 'DB_HOST=localhost\nDB_PASS=supersecret';
-    fs.writeFileSync(path.join(tmpDir, '.env'), envContent);
+    writeEnvFile(tmpDir, envContent);
 
     await pushCommand({ environment: 'staging', passphrase: 'secret-pass', cwd: tmpDir });
 
@@ -40,7 +47,7 @@ describe('push and pull commands', () => {
   });
 
   test('pushCommand throws on unknown environment', async () => {
-    fs.writeFileSync(path.join(tmpDir, '.env'), 'KEY=val');
+    writeEnvFile(tmpDir, 'KEY=val');
     await expect(
       pushCommand({ environment: 'unknown', passphrase: 'pass', cwd: tmpDir })
     ).rejects.toThrow("Environment 'unknown' is not defined");
